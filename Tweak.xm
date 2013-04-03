@@ -1,46 +1,112 @@
 #import <SpringBoard/SBAwayView.h>
 #import <SpringBoard/SBAwayChargingView.h>
 #import <SpringBoard/SBBatteryChargingView.h>
+
 #define PATH @"/System/Library/CoreServices/SpringBoard.app"
 
-static BOOL enableAnimateBattery=YES;
-static BOOL animateFullStatus=YES;
+static BOOL LSBattery = YES;
+static BOOL LSReflection = YES;
 
-static void getSettings(){
-	NSDictionary *defaults=[NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/net.limneos.animatebattery.plist"];
-	enableAnimateBattery=[defaults objectForKey:@"enabled"] ?  [[defaults objectForKey:@"enabled"] boolValue] : YES;
-	animateFullStatus=[defaults objectForKey:@"allTiles"] ?  [[defaults objectForKey:@"allTiles"] boolValue] : YES;
+static BOOL ABBattery = YES;
+static BOOL ABReflection = YES;
+static BOOL ABWallpaper = YES;
+
+static BOOL ABAnimation = YES;
+static BOOL ABFullStatus = YES;
+
+static void ABSettings(){
+	NSDictionary *settings = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.poynterco.chargingbattery.plist"];
+	LSBattery = [settings objectForKey:@"LSBattery"] ? [[settings objectForKey:@"LSBattery"] boolValue] : YES;
+	LSReflection = [settings objectForKey:@"LSReflection"] ? [[settings objectForKey:@"LSReflection"] boolValue] : YES;
+	ABBattery = [settings objectForKey:@"ABBattery"] ? [[settings objectForKey:@"ABBattery"] boolValue] : YES;
+	ABReflection = [settings objectForKey:@"ABReflection"] ? [[settings objectForKey:@"ABReflection"] boolValue] : YES;
+	ABWallpaper = [settings objectForKey:@"ABWallpaper"] ? [[settings objectForKey:@"ABWallpaper"] boolValue] : YES;
+	ABAnimation = [settings objectForKey:@"ABAnimation"] ? [[settings objectForKey:@"ABAnimation"] boolValue] : YES;
+	ABFullStatus = [settings objectForKey:@"ABFullStatus"] ? [[settings objectForKey:@"ABFullStatus"] boolValue] : YES;
 }
 
 %hook SBAwayView
 -(void)showChargingView{
 	%orig;
-	getSettings();
-	if (!enableAnimateBattery)
+	ABSettings();     
+	if (!ABAnimation)
 		return;
-	SBBatteryChargingView *chargingView=[[self chargingView] chargingView];
-	UIImageView *battView=MSHookIvar<UIImageView *>(chargingView,"_topBatteryView");
-	if (chargingView.alpha>0 && ![battView isAnimating] ){
-		[chargingView setShowsReflection:NO];
-		NSMutableArray *images=[NSMutableArray array];
-		int startImage=animateFullStatus ? 1 : ([chargingView _currentBatteryIndex]-1>0 ? [chargingView _currentBatteryIndex]-1 : [chargingView _currentBatteryIndex]) ;
-		for (int i=startImage; i<=[chargingView _currentBatteryIndex]; i++){
-			[images addObject:[UIImage imageNamed:[NSString stringWithFormat:[chargingView _imageFormatString],i]]];
+	SBBatteryChargingView *chargingView = [[self chargingView] chargingView];
+	UIImageView *chargingBattery = MSHookIvar <UIImageView *>(chargingView,"_topBatteryView");
+	UIDeviceBatteryState batteryState = [UIDevice currentDevice].batteryState;
+	if (batteryState == UIDeviceBatteryStateUnplugged){
+		[chargingBattery stopAnimating];
+		if (LSReflection) {
+			[chargingView setShowsReflection:YES];
+		} else {
+			[chargingView setShowsReflection:NO];
 		}
-		battView.animationImages = images;
-		battView.animationDuration = images.count>4 ? images.count/4 : 1;
-		battView.animationRepeatCount = 0;
-		[battView startAnimating];
+		return;
+	} else {
+		if ([chargingView _currentBatteryIndex] == 17){
+			[chargingBattery stopAnimating];
+			%orig;
+			return;
+		} else {
+			if (batteryState == UIDeviceBatteryStateCharging && ![chargingBattery isAnimating]){
+				if (ABReflection) {
+					[chargingView setShowsReflection:YES];
+				} else {
+					[chargingView setShowsReflection:NO];
+				}
+				NSMutableArray *batteryImages = [NSMutableArray array];
+				int startImage = ABFullAnimation ? 1 : ([chargingView _currentBatteryIndex]-1 > 0 ? [chargingView _currentBatteryIndex]-1 : [chargingView _currentBatteryIndex]);
+				for (int i = startImage; i <= [chargingView _currentBatteryIndex]; i++){
+					[batteryImages addObject:[UIImage imageNamed:[NSString stringWithFormat:[chargingView _imageFormatString],i]]];
+				}
+				chargingBattery.animationImages = batteryImages;
+				chargingBattery.animationDuration = batteryImages.count > 4 ? batteryImages.count/4 : 1;
+				chargingBattery.animationRepeatCount = 0;
+				[chargingBattery startAnimating];
+			}
+		}
 	}
 }
+
 -(void)hideChargingView{
-	if (!enableAnimateBattery){
+	if (!ABAnimation){
 		%orig;
 		return;
 	}
-	UIImageView *charginView=[[self chargingView] chargingView];
-	UIImageView *battView=MSHookIvar<UIImageView *>(charginView,"_topBatteryView");
-	[battView stopAnimating];
+	SBBatteryChargingView *chargingView = [[self chargingView] chargingView];
+	UIImageView *chargingBattery = MSHookIvar<UIImageView *>(chargingView,"_topBatteryView");
+	[chargingBattery stopAnimating];
 	%orig;
 }
 %end
+
+%hook SBAwayChargingView
++ (BOOL)shouldShowDeviceBattery {
+	UIDeviceBatteryState batteryState = [UIDevice currentDevice].batteryState;
+	if (batteryState == UIDeviceBatteryStateUnplugged){
+		if (LSBattery) return YES;
+		return NO;
+	} else {
+		if (ABBattery) return YES;
+		return NO;
+	}
+}
+%end
+
+%hook SBWallpaperView
+- (float)alpha {
+	if (ABWallpaper) return 0.0f;
+	return %orig;
+}
+%end
+
+static void ABReloadSettings(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo){
+	ABSettings();
+}
+
+%ctor {
+	NSAutoreleasePool *ABPool = [NSAutoreleasePool new];
+	ABSettings();
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, &ABReloadSettings, CFSTR("net.limneos.animatebattery.reload"), NULL, 0);
+	[ABPool drain];
+}
