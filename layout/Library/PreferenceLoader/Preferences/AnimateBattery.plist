@@ -117,6 +117,20 @@
 			<key>PostNotification</key>
 			<string>net.limneos.animatebattery.reload</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>net.limneos.animatebattery</string>
+			<key>key</key>
+			<string>ABFullStatus</string>
+			<key>label</key>
+			<string>Full Status</string>
+			<key>PostNotification</key>
+			<string>net.limneos.animatebattery.reload</string>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>AnimateBattery</string>
